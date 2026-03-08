@@ -38,14 +38,14 @@ mv kubedump /usr/local/bin/
 
 ## Configuration
 
-Create a `.context-map` file in your working directory mapping local directory names to kubectl context names:
+Create a `.kubedumpcfg` file in your working directory mapping local directory names to kubectl context names:
 
 ```
 prod-in-cluster=arn:aws:eks:ap-south-1:123456789:cluster/prod-in-cluster
 dev-in-cluster=arn:aws:eks:ap-south-1:123456789:cluster/dev-in-cluster
 ```
 
-When a `.context-map` is present, all commands operate across every listed cluster automatically. Without it, commands fall back to the current kubectl context.
+When a `.kubedumpcfg` is present, all commands operate across every listed cluster automatically. Without it, commands fall back to the current kubectl context.
 
 ## Usage
 
@@ -54,7 +54,7 @@ When a `.context-map` is present, all commands operate across every listed clust
 Fetch all resources from every cluster (or a specific one) and write them to the directory tree.
 
 ```bash
-# All clusters from .context-map
+# All clusters from .kubedumpcfg
 kubedump discover
 
 # Skip resources owned by Helm (values.yaml is still captured)

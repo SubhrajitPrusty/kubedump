@@ -33,8 +33,19 @@ func parseResourceMeta(path string) (*resourceMeta, error) {
 	return &m, nil
 }
 
+// isIgnored reports whether kind matches any entry in ignoreKinds (case-insensitive).
+func isIgnored(kind string, ignoreKinds []string) bool {
+	lower := strings.ToLower(kind)
+	for _, ig := range ignoreKinds {
+		if strings.ToLower(ig) == lower {
+			return true
+		}
+	}
+	return false
+}
+
 // Discover fetches all resources from a cluster and writes them to baseDir.
-func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dryRun bool) error {
+func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds []string, skipHelm, dryRun bool) error {
 	fmt.Printf("Cluster: %s  (context: %s)\n", clusterDir, context)
 
 	var namespaces []string
@@ -62,6 +73,9 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dr
 			if kind == "" {
 				continue
 			}
+			if isIgnored(kind, ignoreKinds) {
+				continue
+			}
 
 			resources, err := GetResources(context, ns, kind)
 			if err != nil || len(resources) == 0 {
@@ -84,7 +98,7 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dr
 }
 
 // Refresh re-fetches every existing YAML file under clusterPath from the live cluster.
-func Refresh(clusterPath, context, nsFilter string, skipHelm, dryRun bool) error {
+func Refresh(clusterPath, context, nsFilter string, ignoreKinds []string, skipHelm, dryRun bool) error {
 	clusterDir := filepath.Base(clusterPath)
 	fmt.Printf("Cluster: %s  (context: %s)\n", clusterDir, context)
 
@@ -114,6 +128,10 @@ func Refresh(clusterPath, context, nsFilter string, skipHelm, dryRun bool) error
 				continue
 			}
 			kindDir := kindEntry.Name()
+			if isIgnored(kindDir, ignoreKinds) {
+				fmt.Printf("  [ignore] %s in %s\n", kindDir, ns)
+				continue
+			}
 			kindPath := filepath.Join(nsPath, kindDir)
 
 			// HelmRelease dirs: refresh via helm get values

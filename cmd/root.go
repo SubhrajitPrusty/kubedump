@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -21,7 +22,20 @@ and saves them under:
   <cluster>/<namespace>/<Kind>/<name>.yaml
   <cluster>/<namespace>/HelmRelease/<release>/values.yaml
 
-Cluster contexts are resolved via a .context-map file in the base directory.`,
+Cluster contexts are resolved via a kubedump.yaml file in the base directory.`,
+}
+
+// mergeIgnoreKinds combines kinds from the config file with any extra kinds
+// provided via the --ignore-kinds flag (comma-separated string).
+func mergeIgnoreKinds(fromConfig []string, fromFlag string) []string {
+	merged := append([]string{}, fromConfig...)
+	for _, k := range strings.Split(fromFlag, ",") {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			merged = append(merged, k)
+		}
+	}
+	return merged
 }
 
 func Execute() {
