@@ -39,7 +39,7 @@ HelmRelease directories are refreshed via helm get values.`,
 
 			context, ok := ctxMap[clusterDir]
 			if !ok {
-				context = clusterDir // fall back to dir name as context
+				continue // skip directories not in context map
 			}
 
 			if err := runner.Refresh(clusterPath, context, refreshNamespace, refreshSkipHelm, dryRun); err != nil {
