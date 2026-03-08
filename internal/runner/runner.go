@@ -84,7 +84,7 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dr
 }
 
 // Refresh re-fetches every existing YAML file under clusterPath from the live cluster.
-func Refresh(clusterPath, context, nsFilter string, dryRun bool) error {
+func Refresh(clusterPath, context, nsFilter string, skipHelm, dryRun bool) error {
 	clusterDir := filepath.Base(clusterPath)
 	fmt.Printf("Cluster: %s  (context: %s)\n", clusterDir, context)
 
@@ -118,6 +118,10 @@ func Refresh(clusterPath, context, nsFilter string, dryRun bool) error {
 
 			// HelmRelease dirs: refresh via helm get values
 			if kindDir == "HelmRelease" {
+				if skipHelm {
+					fmt.Printf("  [skip-helm] HelmRelease in %s\n", ns)
+					continue
+				}
 				releaseEntries, _ := os.ReadDir(kindPath)
 				for _, re := range releaseEntries {
 					if !re.IsDir() {

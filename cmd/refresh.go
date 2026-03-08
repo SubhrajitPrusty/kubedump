@@ -11,6 +11,7 @@ import (
 )
 
 var refreshNamespace string
+var refreshSkipHelm bool
 
 var refreshCmd = &cobra.Command{
 	Use:   "refresh",
@@ -41,7 +42,7 @@ HelmRelease directories are refreshed via helm get values.`,
 				context = clusterDir // fall back to dir name as context
 			}
 
-			if err := runner.Refresh(clusterPath, context, refreshNamespace, dryRun); err != nil {
+			if err := runner.Refresh(clusterPath, context, refreshNamespace, refreshSkipHelm, dryRun); err != nil {
 				fmt.Fprintf(os.Stderr, "error on cluster %s: %v\n", clusterDir, err)
 			}
 		}
@@ -51,5 +52,6 @@ HelmRelease directories are refreshed via helm get values.`,
 
 func init() {
 	refreshCmd.Flags().StringVar(&refreshNamespace, "namespace", "", "Limit to a specific namespace")
+	refreshCmd.Flags().BoolVar(&refreshSkipHelm, "skip-helm", false, "Skip refreshing HelmRelease directories")
 	rootCmd.AddCommand(refreshCmd)
 }
