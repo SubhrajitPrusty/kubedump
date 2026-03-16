@@ -10,7 +10,7 @@ Helm releases are tracked as `values.yaml` rather than noisy rendered manifests.
 
 ## Output layout
 
-```
+```text
 <cluster>/
   <namespace>/
     <Kind>/
@@ -38,14 +38,19 @@ mv kubedump /usr/local/bin/
 
 ## Configuration
 
-Create a `.kubedumpcfg` file in your working directory mapping local directory names to kubectl context names:
+Create a `kubedump.yaml` file in your working directory mapping local directory names to kubectl context names.
+And optionally, a list of resource kinds to skip during discover/refresh.
 
-```
-prod-in-cluster=arn:aws:eks:ap-south-1:123456789:cluster/prod-in-cluster
-dev-in-cluster=arn:aws:eks:ap-south-1:123456789:cluster/dev-in-cluster
-```
+Example kubedump.yaml:
 
-When a `.kubedumpcfg` is present, all commands operate across every listed cluster automatically. Without it, commands fall back to the current kubectl context.
+```yaml
+clusters:
+  api-cluster: arn:aws:eks:ap-south-1:123456789:cluster/api-cluster
+  ws-cluster: arn:aws:eks:ap-south-1:123456789:cluster/ws-cluster
+ignore_kinds:
+  - ConfigMap
+  - Secret
+```
 
 ## Usage
 
@@ -54,11 +59,11 @@ When a `.kubedumpcfg` is present, all commands operate across every listed clust
 Fetch all resources from every cluster (or a specific one) and write them to the directory tree.
 
 ```bash
-# All clusters from .kubedumpcfg
+# All clusters from kubedump.yaml
 kubedump discover
 
-# Skip resources owned by Helm (values.yaml is still captured)
-kubedump discover --skip-helm
+# Include resources owned by Helm
+kubedump discover --include-helm
 
 # Single namespace / explicit context
 kubedump discover --namespace default --context my-ctx --cluster my-cluster

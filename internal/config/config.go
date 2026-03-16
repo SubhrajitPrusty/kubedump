@@ -15,7 +15,7 @@ type Config struct {
 	IgnoreKinds []string `yaml:"ignore_kinds"`
 }
 
-// LoadConfigMap reads the kubedump.yaml file and returns the parsed Config.
+// LoadConfig reads the kubedump.yaml file and returns the parsed Config.
 //
 // Example kubedump.yaml:
 //
@@ -25,7 +25,7 @@ type Config struct {
 //	ignore_kinds:
 //	  - ConfigMap
 //	  - Secret
-func LoadConfigMap(baseDir string) (*Config, error) {
+func LoadConfig(baseDir string) (*Config, error) {
 	path := filepath.Join(baseDir, "kubedump.yaml")
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {

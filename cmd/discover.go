@@ -23,20 +23,23 @@ var discoverCmd = &cobra.Command{
 	Use:   "discover",
 	Short: "Discover all resources from clusters and write to the directory structure",
 	Long: `Queries each cluster for all resources of the specified kinds and saves them.
-Helm release values are always captured when helm is available.
-With --skip-helm, resources owned by Helm are omitted (only values.yaml is kept).`,
+Helm release values (values.yaml) are always saved when helm is available.
+Resources owned by Helm are skipped by default; use --include-helm to also dump them as individual files.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.LoadConfigMap(baseDir)
+		cfg, err := config.LoadConfig(baseDir)
 		if err != nil {
 			return err
 		}
 
 		ignoreKinds := mergeIgnoreKinds(cfg.IgnoreKinds, discoverIgnoreKinds)
 
-		// Use kubedump.yaml when no explicit context is given
-		if len(cfg.Clusters) > 0 && discoverContext == "" {
+		// Use kubedump.yaml clusters when available
+		if len(cfg.Clusters) > 0 {
+			if discoverContext != "" {
+				fmt.Fprintf(os.Stderr, "[warn] --context=%s ignored: kubedump.yaml defines clusters; use --cluster to override the directory name\n", discoverContext)
+			}
 			for clusterDir, context := range cfg.Clusters {
-				if err := runner.Discover(baseDir, clusterDir, context, discoverNamespace, discoverKinds, ignoreKinds, !includeHelm, dryRun); err != nil {
+				if err := runner.Discover(baseDir, clusterDir, context, discoverNamespace, discoverKinds, ignoreKinds, includeHelm, dryRun); err != nil {
 					fmt.Fprintf(os.Stderr, "error on cluster %s: %v\n", clusterDir, err)
 				}
 			}
@@ -59,7 +62,7 @@ With --skip-helm, resources owned by Helm are omitted (only values.yaml is kept)
 			clusterDir = parts[len(parts)-1]
 		}
 
-		return runner.Discover(baseDir, clusterDir, discoverContext, discoverNamespace, discoverKinds, ignoreKinds, !includeHelm, dryRun)
+		return runner.Discover(baseDir, clusterDir, discoverContext, discoverNamespace, discoverKinds, ignoreKinds, includeHelm, dryRun)
 	},
 }
 

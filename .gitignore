@@ -34,3 +34,6 @@ go.work.sum
 
 # LLMs
 CLAUDE.md
+
+# Temp
+tmp/

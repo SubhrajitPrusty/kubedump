@@ -23,14 +23,14 @@ var refreshCmd = &cobra.Command{
 kind/name/namespace, then re-fetches and overwrites it from the live cluster.
 HelmRelease directories are refreshed via helm get values.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.LoadConfigMap(baseDir)
+		cfg, err := config.LoadConfig(baseDir)
 		if err != nil {
 			return err
 		}
 
 		ignoreKinds := mergeIgnoreKinds(cfg.IgnoreKinds, refreshIgnoreKinds)
-		fmt.Fprintf(os.Stderr, "Refreshing %d clusters\n", len(cfg.Clusters))
-		fmt.Fprintf(os.Stderr, "Ignoring %v kinds\n", ignoreKinds)
+		fmt.Printf("Refreshing %d clusters\n", len(cfg.Clusters))
+		fmt.Printf("Ignoring %v kinds\n", ignoreKinds)
 
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
@@ -49,7 +49,7 @@ HelmRelease directories are refreshed via helm get values.`,
 				continue // skip directories not in context map
 			}
 
-			if err := runner.Refresh(clusterPath, context, refreshNamespace, ignoreKinds, !refreshIncludeHelm, dryRun); err != nil {
+			if err := runner.Refresh(clusterPath, context, refreshNamespace, ignoreKinds, refreshIncludeHelm, dryRun); err != nil {
 				fmt.Fprintf(os.Stderr, "error on cluster %s: %v\n", clusterDir, err)
 			}
 		}

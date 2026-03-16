@@ -49,8 +49,17 @@ func GetResources(context, ns, kind string) ([]ResourceInfo, error) {
 	)
 	out, err := cmd.Output()
 	if err != nil {
-		// Resource type may simply not exist in this cluster — not an error worth surfacing.
-		return nil, nil
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr := strings.TrimSpace(string(ee.Stderr))
+			// These messages indicate the CRD/API group simply isn't registered — not a real error.
+			if strings.Contains(stderr, "no matches for kind") ||
+				strings.Contains(stderr, "the server doesn't have a resource type") {
+				return nil, nil
+			}
+			fmt.Fprintf(os.Stderr, "  [warn] kubectl get %s -n %s: %s\n", kind, ns, stderr)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("kubectl get %s -n %s: %w", kind, ns, err)
 	}
 
 	var resources []ResourceInfo
