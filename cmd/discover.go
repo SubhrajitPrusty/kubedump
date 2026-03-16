@@ -11,29 +11,35 @@ import (
 )
 
 var (
-	discoverContext   string
-	discoverCluster   string
-	discoverNamespace string
-	discoverKinds     string
-	skipHelm          bool
+	discoverContext     string
+	discoverCluster     string
+	discoverNamespace   string
+	discoverKinds       string
+	discoverIgnoreKinds string
+	includeHelm         bool
 )
 
 var discoverCmd = &cobra.Command{
 	Use:   "discover",
 	Short: "Discover all resources from clusters and write to the directory structure",
 	Long: `Queries each cluster for all resources of the specified kinds and saves them.
-Helm release values are always captured when helm is available.
-With --skip-helm, resources owned by Helm are omitted (only values.yaml is kept).`,
+Helm release values (values.yaml) are always saved when helm is available.
+Resources owned by Helm are skipped by default; use --include-helm to also dump them as individual files.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctxMap, err := config.LoadContextMap(baseDir)
+		cfg, err := config.LoadConfig(baseDir)
 		if err != nil {
 			return err
 		}
 
-		// Use .context-map when no explicit context is given
-		if len(ctxMap) > 0 && discoverContext == "" {
-			for clusterDir, context := range ctxMap {
-				if err := runner.Discover(baseDir, clusterDir, context, discoverNamespace, discoverKinds, skipHelm, dryRun); err != nil {
+		ignoreKinds := mergeIgnoreKinds(cfg.IgnoreKinds, discoverIgnoreKinds)
+
+		// Use kubedump.yaml clusters when available
+		if len(cfg.Clusters) > 0 {
+			if discoverContext != "" {
+				fmt.Fprintf(os.Stderr, "[warn] --context=%s ignored: kubedump.yaml defines clusters; use --cluster to override the directory name\n", discoverContext)
+			}
+			for clusterDir, context := range cfg.Clusters {
+				if err := runner.Discover(baseDir, clusterDir, context, discoverNamespace, discoverKinds, ignoreKinds, includeHelm, dryRun); err != nil {
 					fmt.Fprintf(os.Stderr, "error on cluster %s: %v\n", clusterDir, err)
 				}
 			}
@@ -56,7 +62,7 @@ With --skip-helm, resources owned by Helm are omitted (only values.yaml is kept)
 			clusterDir = parts[len(parts)-1]
 		}
 
-		return runner.Discover(baseDir, clusterDir, discoverContext, discoverNamespace, discoverKinds, skipHelm, dryRun)
+		return runner.Discover(baseDir, clusterDir, discoverContext, discoverNamespace, discoverKinds, ignoreKinds, includeHelm, dryRun)
 	},
 }
 
@@ -65,6 +71,7 @@ func init() {
 	discoverCmd.Flags().StringVar(&discoverCluster, "cluster", "", "Override cluster directory name (default: last segment of context)")
 	discoverCmd.Flags().StringVar(&discoverNamespace, "namespace", "", "Limit to a specific namespace")
 	discoverCmd.Flags().StringVar(&discoverKinds, "kinds", runner.DefaultKinds, "Comma-separated resource kinds to fetch")
-	discoverCmd.Flags().BoolVar(&skipHelm, "skip-helm", false, "Skip resources with app.kubernetes.io/managed-by=Helm")
+	discoverCmd.Flags().StringVar(&discoverIgnoreKinds, "ignore-kinds", "", "Comma-separated resource kinds to skip (merged with ignore_kinds from kubedump.yaml)")
+	discoverCmd.Flags().BoolVar(&includeHelm, "include-helm", false, "Include resources managed by Helm (skipped by default)")
 	rootCmd.AddCommand(discoverCmd)
 }

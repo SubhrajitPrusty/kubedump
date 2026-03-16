@@ -12,12 +12,13 @@ import (
 
 const DefaultKinds = "Deployment,StatefulSet,DaemonSet,CronJob,Service,Ingress,ConfigMap,HorizontalPodAutoscaler,ServiceAccount,PodDisruptionBudget"
 
-// resourceMeta is a minimal struct for parsing kind/name/namespace from a YAML file.
+// resourceMeta is a minimal struct for parsing kind/name/namespace/labels from a YAML file.
 type resourceMeta struct {
 	Kind     string `yaml:"kind"`
 	Metadata struct {
-		Name      string `yaml:"name"`
-		Namespace string `yaml:"namespace"`
+		Name      string            `yaml:"name"`
+		Namespace string            `yaml:"namespace"`
+		Labels    map[string]string `yaml:"labels"`
 	} `yaml:"metadata"`
 }
 
@@ -33,8 +34,19 @@ func parseResourceMeta(path string) (*resourceMeta, error) {
 	return &m, nil
 }
 
+// isIgnored reports whether kind matches any entry in ignoreKinds (case-insensitive).
+func isIgnored(kind string, ignoreKinds []string) bool {
+	lower := strings.ToLower(kind)
+	for _, ig := range ignoreKinds {
+		if strings.ToLower(ig) == lower {
+			return true
+		}
+	}
+	return false
+}
+
 // Discover fetches all resources from a cluster and writes them to baseDir.
-func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dryRun bool) error {
+func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds []string, includeHelm, dryRun bool) error {
 	fmt.Printf("Cluster: %s  (context: %s)\n", clusterDir, context)
 
 	var namespaces []string
@@ -53,6 +65,7 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dr
 	for _, ns := range namespaces {
 		fmt.Printf("  Namespace: %s\n", ns)
 
+		// Always snapshot Helm release values — this is the preferred artifact for Helm-managed apps.
 		if err := DumpHelmReleases(baseDir, clusterDir, ns, context, dryRun); err != nil {
 			fmt.Fprintf(os.Stderr, "  [warn] helm releases in %s: %v\n", ns, err)
 		}
@@ -62,14 +75,21 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dr
 			if kind == "" {
 				continue
 			}
+			if isIgnored(kind, ignoreKinds) {
+				continue
+			}
 
 			resources, err := GetResources(context, ns, kind)
-			if err != nil || len(resources) == 0 {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  [error] list %s in %s: %v\n", kind, ns, err)
+				continue
+			}
+			if len(resources) == 0 {
 				continue
 			}
 
 			for _, res := range resources {
-				if skipHelm && res.ManagedBy == "Helm" {
+				if !includeHelm && res.ManagedBy == "Helm" {
 					fmt.Printf("  [skip-helm] %s/%s\n", kind, res.Name)
 					continue
 				}
@@ -84,7 +104,7 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, skipHelm, dr
 }
 
 // Refresh re-fetches every existing YAML file under clusterPath from the live cluster.
-func Refresh(clusterPath, context, nsFilter string, skipHelm, dryRun bool) error {
+func Refresh(clusterPath, context, nsFilter string, ignoreKinds []string, includeHelm, dryRun bool) error {
 	clusterDir := filepath.Base(clusterPath)
 	fmt.Printf("Cluster: %s  (context: %s)\n", clusterDir, context)
 
@@ -114,15 +134,23 @@ func Refresh(clusterPath, context, nsFilter string, skipHelm, dryRun bool) error
 				continue
 			}
 			kindDir := kindEntry.Name()
+			if isIgnored(kindDir, ignoreKinds) {
+				fmt.Printf("  [ignore] %s in %s\n", kindDir, ns)
+				continue
+			}
 			kindPath := filepath.Join(nsPath, kindDir)
 
 			// HelmRelease dirs: refresh via helm get values
 			if kindDir == "HelmRelease" {
-				if skipHelm {
+				if !includeHelm {
 					fmt.Printf("  [skip-helm] HelmRelease in %s\n", ns)
 					continue
 				}
-				releaseEntries, _ := os.ReadDir(kindPath)
+				releaseEntries, err := os.ReadDir(kindPath)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "  [error] read HelmRelease dir %s: %v\n", kindPath, err)
+					continue
+				}
 				for _, re := range releaseEntries {
 					if !re.IsDir() {
 						continue
@@ -136,7 +164,11 @@ func Refresh(clusterPath, context, nsFilter string, skipHelm, dryRun bool) error
 			}
 
 			// Regular resource files
-			entries, _ := os.ReadDir(kindPath)
+			entries, err := os.ReadDir(kindPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  [error] read kind dir %s: %v\n", kindPath, err)
+				continue
+			}
 			for _, e := range entries {
 				if e.IsDir() {
 					continue
@@ -178,11 +210,12 @@ func PruneHelm(baseDir string, dryRun bool) error {
 			return nil
 		}
 
-		data, err := os.ReadFile(path)
+		meta, err := parseResourceMeta(path)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "  [warn] parse %s: %v\n", path, err)
 			return nil
 		}
-		if !strings.Contains(string(data), "managed-by: Helm") {
+		if meta.Metadata.Labels["app.kubernetes.io/managed-by"] != "Helm" {
 			return nil
 		}
 

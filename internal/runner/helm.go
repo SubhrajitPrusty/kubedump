@@ -22,14 +22,19 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 		return nil
 	}
 
-	out, err := exec.Command(
+	cmd := exec.Command(
 		"helm", "list",
 		"-n", ns,
 		"--kube-context", context,
 		"-q",
-	).Output()
+	)
+	out, err := cmd.Output()
 	if err != nil {
-		return nil // namespace may have no helm releases
+		if ee, ok := err.(*exec.ExitError); ok {
+			fmt.Fprintf(os.Stderr, "  [warn] helm list -n %s: %s\n", ns, strings.TrimSpace(string(ee.Stderr)))
+			return nil
+		}
+		return fmt.Errorf("helm list -n %s: %w", ns, err)
 	}
 
 	for _, release := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -54,6 +59,7 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 			"helm", "get", "values", release,
 			"-n", ns,
 			"--kube-context", context,
+			"-o", "yaml",
 		).Output()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %v\n", release, err)
@@ -84,6 +90,7 @@ func RefreshHelmRelease(release, ns, context, outFile string, dryRun bool) error
 		"helm", "get", "values", release,
 		"-n", ns,
 		"--kube-context", context,
+		"-o", "yaml",
 	).Output()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %v\n", release, err)

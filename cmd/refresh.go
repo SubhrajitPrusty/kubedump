@@ -10,8 +10,11 @@ import (
 	"github.com/subhrajitprusty/kubedump/internal/runner"
 )
 
-var refreshNamespace string
-var refreshSkipHelm bool
+var (
+	refreshNamespace   string
+	refreshIncludeHelm bool
+	refreshIgnoreKinds string
+)
 
 var refreshCmd = &cobra.Command{
 	Use:   "refresh",
@@ -20,10 +23,14 @@ var refreshCmd = &cobra.Command{
 kind/name/namespace, then re-fetches and overwrites it from the live cluster.
 HelmRelease directories are refreshed via helm get values.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctxMap, err := config.LoadContextMap(baseDir)
+		cfg, err := config.LoadConfig(baseDir)
 		if err != nil {
 			return err
 		}
+
+		ignoreKinds := mergeIgnoreKinds(cfg.IgnoreKinds, refreshIgnoreKinds)
+		fmt.Printf("Refreshing %d clusters\n", len(cfg.Clusters))
+		fmt.Printf("Ignoring %v kinds\n", ignoreKinds)
 
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
@@ -37,12 +44,12 @@ HelmRelease directories are refreshed via helm get values.`,
 			clusterDir := e.Name()
 			clusterPath := filepath.Join(baseDir, clusterDir)
 
-			context, ok := ctxMap[clusterDir]
+			context, ok := cfg.Clusters[clusterDir]
 			if !ok {
 				continue // skip directories not in context map
 			}
 
-			if err := runner.Refresh(clusterPath, context, refreshNamespace, refreshSkipHelm, dryRun); err != nil {
+			if err := runner.Refresh(clusterPath, context, refreshNamespace, ignoreKinds, refreshIncludeHelm, dryRun); err != nil {
 				fmt.Fprintf(os.Stderr, "error on cluster %s: %v\n", clusterDir, err)
 			}
 		}
@@ -52,6 +59,7 @@ HelmRelease directories are refreshed via helm get values.`,
 
 func init() {
 	refreshCmd.Flags().StringVar(&refreshNamespace, "namespace", "", "Limit to a specific namespace")
-	refreshCmd.Flags().BoolVar(&refreshSkipHelm, "skip-helm", false, "Skip refreshing HelmRelease directories")
+	refreshCmd.Flags().BoolVar(&refreshIncludeHelm, "include-helm", false, "Include HelmRelease directories during refresh (skipped by default)")
+	refreshCmd.Flags().StringVar(&refreshIgnoreKinds, "ignore-kinds", "", "Comma-separated resource kinds to skip (merged with ignore_kinds from kubedump.yaml)")
 	rootCmd.AddCommand(refreshCmd)
 }
