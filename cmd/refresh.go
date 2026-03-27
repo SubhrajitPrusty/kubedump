@@ -21,7 +21,8 @@ var refreshCmd = &cobra.Command{
 	Short: "Re-fetch every existing YAML file in the directory tree from the live cluster",
 	Long: `Walks the existing directory structure, reads each YAML file to determine
 kind/name/namespace, then re-fetches and overwrites it from the live cluster.
-HelmRelease directories are refreshed via helm get values.`,
+HelmRelease directories (values.yaml) are always refreshed.
+Resources managed by Helm are skipped by default; use --include-helm to also refresh them.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.LoadConfig(baseDir)
 		if err != nil {
@@ -59,7 +60,7 @@ HelmRelease directories are refreshed via helm get values.`,
 
 func init() {
 	refreshCmd.Flags().StringVar(&refreshNamespace, "namespace", "", "Limit to a specific namespace")
-	refreshCmd.Flags().BoolVar(&refreshIncludeHelm, "include-helm", false, "Include HelmRelease directories during refresh (skipped by default)")
+	refreshCmd.Flags().BoolVar(&refreshIncludeHelm, "include-helm", false, "Include resources managed by Helm (skipped by default; HelmRelease values.yaml always refreshed)")
 	refreshCmd.Flags().StringVar(&refreshIgnoreKinds, "ignore-kinds", "", "Comma-separated resource kinds to skip (merged with ignore_kinds from kubedump.yaml)")
 	rootCmd.AddCommand(refreshCmd)
 }
