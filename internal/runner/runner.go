@@ -140,12 +140,8 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds []string, includ
 			}
 			kindPath := filepath.Join(nsPath, kindDir)
 
-			// HelmRelease dirs: refresh via helm get values
+			// HelmRelease dirs: always refresh via helm get values
 			if kindDir == "HelmRelease" {
-				if !includeHelm {
-					fmt.Printf("  [skip-helm] HelmRelease in %s\n", ns)
-					continue
-				}
 				releaseEntries, err := os.ReadDir(kindPath)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "  [error] read HelmRelease dir %s: %v\n", kindPath, err)
@@ -181,6 +177,10 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds []string, includ
 				meta, err := parseResourceMeta(yamlFile)
 				if err != nil || meta.Kind == "" || meta.Metadata.Name == "" {
 					fmt.Printf("  [skip] %s (could not parse kind/name)\n", yamlFile)
+					continue
+				}
+				if !includeHelm && meta.Metadata.Labels["app.kubernetes.io/managed-by"] == "Helm" {
+					fmt.Printf("  [skip-helm] %s/%s\n", meta.Kind, meta.Metadata.Name)
 					continue
 				}
 				if err := FetchAndSave(context, meta.Kind, meta.Metadata.Name, meta.Metadata.Namespace, yamlFile, dryRun); err != nil {
