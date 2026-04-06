@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -36,14 +37,22 @@ Resources owned by Helm are skipped by default; use --include-helm to also dump 
 		// Use kubedump.yaml clusters when available
 		if len(cfg.Clusters) > 0 {
 			if discoverContext != "" {
-				fmt.Fprintf(os.Stderr, "[warn] --context=%s ignored: kubedump.yaml defines clusters; use --cluster to override the directory name\n", discoverContext)
+				fmt.Fprintf(os.Stderr, "[warn] --context=%s ignored: kubedump.yaml defines clusters; use --cluster to select a specific cluster by its key in kubedump.yaml\n", discoverContext)
 			}
+			if discoverCluster != "" {
+				context, ok := cfg.Clusters[discoverCluster]
+				if !ok {
+					return fmt.Errorf("cluster %q not found in kubedump.yaml", discoverCluster)
+				}
+				return runner.Discover(baseDir, discoverCluster, context, discoverNamespace, discoverKinds, ignoreKinds, includeHelm, dryRun)
+			}
+			var errs []error
 			for clusterDir, context := range cfg.Clusters {
 				if err := runner.Discover(baseDir, clusterDir, context, discoverNamespace, discoverKinds, ignoreKinds, includeHelm, dryRun); err != nil {
-					fmt.Fprintf(os.Stderr, "error on cluster %s: %v\n", clusterDir, err)
+					errs = append(errs, fmt.Errorf("cluster %q: %w", clusterDir, err))
 				}
 			}
-			return nil
+			return errors.Join(errs...)
 		}
 
 		// Fall back to explicit --context or current context
@@ -68,7 +77,7 @@ Resources owned by Helm are skipped by default; use --include-helm to also dump 
 
 func init() {
 	discoverCmd.Flags().StringVar(&discoverContext, "context", "", "kubectl context to use")
-	discoverCmd.Flags().StringVar(&discoverCluster, "cluster", "", "Override cluster directory name (default: last segment of context)")
+	discoverCmd.Flags().StringVar(&discoverCluster, "cluster", "", "Select a specific cluster key from kubedump.yaml, or override directory name when not using kubedump.yaml (default: last segment of context)")
 	discoverCmd.Flags().StringVar(&discoverNamespace, "namespace", "", "Limit to a specific namespace")
 	discoverCmd.Flags().StringVar(&discoverKinds, "kinds", runner.DefaultKinds, "Comma-separated resource kinds to fetch")
 	discoverCmd.Flags().StringVar(&discoverIgnoreKinds, "ignore-kinds", "", "Comma-separated resource kinds to skip (merged with ignore_kinds from kubedump.yaml)")

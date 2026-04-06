@@ -90,9 +90,19 @@ func FetchAndSave(context, kind, name, ns, outFile string, dryRun bool) error {
 		return nil
 	}
 
-	raw, err := exec.Command("kubectl", args...).Output()
+	cmd := exec.Command("kubectl", args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	raw, err := cmd.Output()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "  [error] kubectl get %s/%s: %v\n", kind, name, err)
+		msg := strings.TrimSpace(stderr.String())
+		errMsg := err.Error()
+		if msg == "" {
+			msg = errMsg
+		} else if msg != errMsg {
+			msg = fmt.Sprintf("%s (%s)", msg, errMsg)
+		}
+		fmt.Fprintf(os.Stderr, "  [error] kubectl get %s/%s: %s\n", kind, name, msg)
 		return nil
 	}
 
