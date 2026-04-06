@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -55,14 +56,24 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 			return fmt.Errorf("mkdir for helm release %s: %w", release, err)
 		}
 
-		values, err := exec.Command(
+		helmCmd := exec.Command(
 			"helm", "get", "values", release,
 			"-n", ns,
 			"--kube-context", context,
 			"-o", "yaml",
-		).Output()
+		)
+		var helmStderr bytes.Buffer
+		helmCmd.Stderr = &helmStderr
+		values, err := helmCmd.Output()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %v\n", release, err)
+			msg := strings.TrimSpace(helmStderr.String())
+			errMsg := err.Error()
+			if msg == "" {
+				msg = errMsg
+			} else if msg != errMsg {
+				msg = fmt.Sprintf("%s (%s)", msg, errMsg)
+			}
+			fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %s\n", release, msg)
 			continue
 		}
 
@@ -86,14 +97,24 @@ func RefreshHelmRelease(release, ns, context, outFile string, dryRun bool) error
 		return nil
 	}
 
-	values, err := exec.Command(
+	helmCmd := exec.Command(
 		"helm", "get", "values", release,
 		"-n", ns,
 		"--kube-context", context,
 		"-o", "yaml",
-	).Output()
+	)
+	var stderr bytes.Buffer
+	helmCmd.Stderr = &stderr
+	values, err := helmCmd.Output()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %v\n", release, err)
+		msg := strings.TrimSpace(stderr.String())
+		errMsg := err.Error()
+		if msg == "" {
+			msg = errMsg
+		} else if msg != errMsg {
+			msg = fmt.Sprintf("%s (%s)", msg, errMsg)
+		}
+		fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %s\n", release, msg)
 		return nil
 	}
 
