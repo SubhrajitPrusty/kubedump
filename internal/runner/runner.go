@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultKinds = "Deployment,StatefulSet,DaemonSet,CronJob,Service,Ingress,ConfigMap,HorizontalPodAutoscaler,ServiceAccount,PodDisruptionBudget"
+const DefaultKinds = "Deployment,StatefulSet,DaemonSet,CronJob,Service,Ingress,ConfigMap,HorizontalPodAutoscaler,ServiceAccount,PodDisruptionBudget,Secret"
 
 // resourceMeta is a minimal struct for parsing kind/name/namespace/labels from a YAML file.
 type resourceMeta struct {
@@ -45,8 +45,19 @@ func isIgnored(kind string, ignoreKinds []string) bool {
 	return false
 }
 
+// isNamespaceIgnored reports whether ns matches any entry in ignoreNamespaces (case-insensitive).
+func isNamespaceIgnored(ns string, ignoreNamespaces []string) bool {
+	lower := strings.ToLower(ns)
+	for _, ig := range ignoreNamespaces {
+		if strings.ToLower(ig) == lower {
+			return true
+		}
+	}
+	return false
+}
+
 // Discover fetches all resources from a cluster and writes them to baseDir.
-func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds []string, includeHelm, dryRun bool) error {
+func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds, ignoreNamespaces []string, includeHelm, dryRun bool) error {
 	fmt.Printf("Cluster: %s  (context: %s)\n", clusterDir, context)
 
 	var namespaces []string
@@ -63,6 +74,10 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds 
 	kindList := strings.Split(kinds, ",")
 
 	for _, ns := range namespaces {
+		if isNamespaceIgnored(ns, ignoreNamespaces) {
+			fmt.Printf("  [ignore-ns] %s\n", ns)
+			continue
+		}
 		fmt.Printf("  Namespace: %s\n", ns)
 
 		// Always snapshot Helm release values — this is the preferred artifact for Helm-managed apps.
@@ -104,7 +119,7 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds 
 }
 
 // Refresh re-fetches every existing YAML file under clusterPath from the live cluster.
-func Refresh(clusterPath, context, nsFilter string, ignoreKinds []string, includeHelm, dryRun bool) error {
+func Refresh(clusterPath, context, nsFilter string, ignoreKinds, ignoreNamespaces []string, includeHelm, dryRun bool) error {
 	clusterDir := filepath.Base(clusterPath)
 	fmt.Printf("Cluster: %s  (context: %s)\n", clusterDir, context)
 
@@ -119,6 +134,10 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds []string, includ
 		}
 		ns := nsEntry.Name()
 		if nsFilter != "" && ns != nsFilter {
+			continue
+		}
+		if isNamespaceIgnored(ns, ignoreNamespaces) {
+			fmt.Printf("  [ignore-ns] %s\n", ns)
 			continue
 		}
 		fmt.Printf("  Namespace: %s\n", ns)

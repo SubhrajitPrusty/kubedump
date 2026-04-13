@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	refreshNamespace   string
-	refreshIncludeHelm bool
-	refreshIgnoreKinds string
+	refreshNamespace        string
+	refreshIncludeHelm      bool
+	refreshIgnoreKinds      string
+	refreshIgnoreNamespaces string
 )
 
 var refreshCmd = &cobra.Command{
@@ -30,8 +31,10 @@ Resources managed by Helm are skipped by default; use --include-helm to also ref
 		}
 
 		ignoreKinds := mergeIgnoreKinds(cfg.IgnoreKinds, refreshIgnoreKinds)
+		ignoreNamespaces := mergeIgnoreNamespaces(cfg.IgnoreNamespaces, refreshIgnoreNamespaces)
 		fmt.Printf("Refreshing %d clusters\n", len(cfg.Clusters))
 		fmt.Printf("Ignoring %v kinds\n", ignoreKinds)
+		fmt.Printf("Ignoring %v namespaces\n", ignoreNamespaces)
 
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
@@ -50,7 +53,7 @@ Resources managed by Helm are skipped by default; use --include-helm to also ref
 				continue // skip directories not in context map
 			}
 
-			if err := runner.Refresh(clusterPath, context, refreshNamespace, ignoreKinds, refreshIncludeHelm, dryRun); err != nil {
+			if err := runner.Refresh(clusterPath, context, refreshNamespace, ignoreKinds, ignoreNamespaces, refreshIncludeHelm, dryRun); err != nil {
 				fmt.Fprintf(os.Stderr, "error on cluster %s: %v\n", clusterDir, err)
 			}
 		}
@@ -62,5 +65,6 @@ func init() {
 	refreshCmd.Flags().StringVar(&refreshNamespace, "namespace", "", "Limit to a specific namespace")
 	refreshCmd.Flags().BoolVar(&refreshIncludeHelm, "include-helm", false, "Include resources managed by Helm (skipped by default; HelmRelease values.yaml always refreshed)")
 	refreshCmd.Flags().StringVar(&refreshIgnoreKinds, "ignore-kinds", "", "Comma-separated resource kinds to skip (merged with ignore_kinds from kubedump.yaml)")
+	refreshCmd.Flags().StringVar(&refreshIgnoreNamespaces, "ignore-namespaces", "", "Comma-separated namespaces to skip (merged with ignore_namespaces from kubedump.yaml)")
 	rootCmd.AddCommand(refreshCmd)
 }
