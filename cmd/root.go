@@ -38,6 +38,19 @@ func mergeIgnoreKinds(fromConfig []string, fromFlag string) []string {
 	return merged
 }
 
+// mergeIgnoreNamespaces combines namespaces from the config file with any extra
+// namespaces provided via the --ignore-namespaces flag (comma-separated string).
+func mergeIgnoreNamespaces(fromConfig []string, fromFlag string) []string {
+	merged := append([]string{}, fromConfig...)
+	for _, ns := range strings.Split(fromFlag, ",") {
+		ns = strings.TrimSpace(ns)
+		if ns != "" {
+			merged = append(merged, ns)
+		}
+	}
+	return merged
+}
+
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
