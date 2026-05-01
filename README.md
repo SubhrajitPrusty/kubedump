@@ -39,9 +39,6 @@ mv kubedump /usr/local/bin/
 ## Configuration
 
 Create a `kubedump.yaml` file in your working directory mapping local directory names to kubectl context names.
-And optionally, a list of resource kinds to skip during discover/refresh.
-
-Example kubedump.yaml:
 
 ```yaml
 clusters:
@@ -50,7 +47,27 @@ clusters:
 ignore_kinds:
   - ConfigMap
   - Secret
+ignore_namespaces:
+  - kube-system      # these four are the built-in defaults; listing them
+  - kube-node-lease  # here overrides the defaults entirely, so add any
+  - kube-public      # extras you need alongside them
+  - kube-flannel
+  - my-extra-ns
 ```
+
+`ignore_kinds` and `ignore_namespaces` are optional. When `ignore_namespaces` is absent, `kube-system`, `kube-node-lease`, `kube-public`, and `kube-flannel` are skipped by default. Set `ignore_namespaces: []` to disable the defaults.
+
+### AWS EKS
+
+Populate kubeconfig before running kubedump:
+
+```bash
+for cluster in my-api-cluster my-ws-cluster; do
+  aws eks update-kubeconfig --region ap-south-1 --name "$cluster"
+done
+```
+
+The ARN written by `update-kubeconfig` is what goes in the `clusters` map above.
 
 ## Usage
 
@@ -72,7 +89,7 @@ kubedump discover --namespace default --context my-ctx --cluster my-cluster
 kubedump discover --kinds Deployment,Service,ConfigMap
 ```
 
-Default kinds fetched: `Deployment`, `StatefulSet`, `DaemonSet`, `CronJob`, `Service`, `Ingress`, `ConfigMap`, `HorizontalPodAutoscaler`, `ServiceAccount`, `PodDisruptionBudget`.
+Default kinds fetched: `Deployment`, `StatefulSet`, `DaemonSet`, `CronJob`, `Service`, `Ingress`, `ConfigMap`, `HorizontalPodAutoscaler`, `ServiceAccount`, `PodDisruptionBudget`, `Secret`.
 
 ### refresh
 
@@ -83,6 +100,9 @@ kubedump refresh
 
 # Limit to a specific namespace
 kubedump refresh --namespace default
+
+# Also refresh HelmRelease directories
+kubedump refresh --include-helm
 ```
 
 ### prune-helm
@@ -103,6 +123,10 @@ kubedump prune-helm
 |------|-------------|
 | `--base-dir <dir>` | Base directory for the dump (default: current directory) |
 | `--dry-run` | Print actions without writing or deleting anything |
+
+## GitHub Actions
+
+See [docs/github-actions.md](docs/github-actions.md) for a complete workflow that runs a daily refresh and opens a PR when manifests change.
 
 ## Development
 
