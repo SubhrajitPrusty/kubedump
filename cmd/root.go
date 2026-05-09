@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/subhrajitprusty/kubedump/internal/runner"
 )
 
 var (
@@ -23,6 +24,18 @@ and saves them under:
   <cluster>/<namespace>/HelmRelease/<release>/values.yaml
 
 Cluster contexts are resolved via a kubedump.yaml file in the base directory.`,
+}
+
+// resolveKinds returns the kinds string to use for discover, in priority order:
+// 1. --kinds flag (if explicitly passed), 2. include_kinds from kubedump.yaml, 3. built-in defaults.
+func resolveKinds(cmd *cobra.Command, fromConfig []string, fromFlag string) string {
+	if cmd.Flags().Changed("kinds") {
+		return fromFlag
+	}
+	if len(fromConfig) > 0 {
+		return strings.Join(fromConfig, ",")
+	}
+	return runner.DefaultKinds
 }
 
 // mergeIgnoreKinds combines kinds from the config file with any extra kinds

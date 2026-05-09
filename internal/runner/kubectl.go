@@ -31,16 +31,17 @@ func GetNamespaces(context string) ([]string, error) {
 	return strings.Fields(string(out)), nil
 }
 
-// ResourceInfo holds the name and Helm managed-by label for a resource.
+// ResourceInfo holds the name, Helm managed-by label, and type for a resource.
 type ResourceInfo struct {
 	Name      string
 	ManagedBy string
+	Type      string
 }
 
 // GetResources returns all resources of the given kind in a namespace.
 // Returns an empty slice (no error) when the resource type does not exist in the cluster.
 func GetResources(context, ns, kind string) ([]ResourceInfo, error) {
-	const jsonpath = `{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.app\.kubernetes\.io/managed-by}{"\n"}{end}`
+	const jsonpath = `{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.app\.kubernetes\.io/managed-by}{"\t"}{.type}{"\n"}{end}`
 	cmd := exec.Command(
 		"kubectl", "get", kind,
 		"-n", ns,
@@ -64,13 +65,16 @@ func GetResources(context, ns, kind string) ([]ResourceInfo, error) {
 
 	var resources []ResourceInfo
 	for _, line := range strings.Split(string(out), "\n") {
-		parts := strings.SplitN(line, "\t", 2)
+		parts := strings.SplitN(line, "\t", 3)
 		if len(parts) == 0 || parts[0] == "" {
 			continue
 		}
 		ri := ResourceInfo{Name: parts[0]}
-		if len(parts) == 2 {
+		if len(parts) >= 2 {
 			ri.ManagedBy = strings.TrimSpace(parts[1])
+		}
+		if len(parts) == 3 {
+			ri.Type = strings.TrimSpace(parts[2])
 		}
 		resources = append(resources, ri)
 	}

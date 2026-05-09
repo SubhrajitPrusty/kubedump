@@ -12,9 +12,10 @@ import (
 
 const DefaultKinds = "Deployment,StatefulSet,DaemonSet,CronJob,Service,Ingress,ConfigMap,HorizontalPodAutoscaler,ServiceAccount,PodDisruptionBudget,Secret"
 
-// resourceMeta is a minimal struct for parsing kind/name/namespace/labels from a YAML file.
+// resourceMeta is a minimal struct for parsing kind/name/namespace/labels/type from a YAML file.
 type resourceMeta struct {
 	Kind     string `yaml:"kind"`
+	Type     string `yaml:"type"`
 	Metadata struct {
 		Name      string            `yaml:"name"`
 		Namespace string            `yaml:"namespace"`
@@ -104,6 +105,10 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds,
 			}
 
 			for _, res := range resources {
+				if res.Type == "helm.sh/release.v1" {
+					fmt.Printf("  [skip-helm-secret] %s/%s\n", kind, res.Name)
+					continue
+				}
 				if !includeHelm && res.ManagedBy == "Helm" {
 					fmt.Printf("  [skip-helm] %s/%s\n", kind, res.Name)
 					continue
@@ -196,6 +201,10 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds, ignoreNamespace
 				meta, err := parseResourceMeta(yamlFile)
 				if err != nil || meta.Kind == "" || meta.Metadata.Name == "" {
 					fmt.Printf("  [skip] %s (could not parse kind/name)\n", yamlFile)
+					continue
+				}
+				if meta.Type == "helm.sh/release.v1" {
+					fmt.Printf("  [skip-helm-secret] %s/%s\n", meta.Kind, meta.Metadata.Name)
 					continue
 				}
 				if !includeHelm && meta.Metadata.Labels["app.kubernetes.io/managed-by"] == "Helm" {

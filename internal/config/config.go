@@ -19,6 +19,10 @@ var DefaultIgnoreNamespaces = []string{
 type Config struct {
 	// Clusters maps local directory name -> kubectl context name.
 	Clusters map[string]string `yaml:"clusters"`
+	// Kinds lists resource kinds to fetch during discover.
+	// When absent, the built-in default kinds are used.
+	// Overridden by --kinds on the command line.
+	Kinds []string `yaml:"include_kinds"`
 	// IgnoreKinds lists resource kinds to skip during discover/refresh.
 	IgnoreKinds []string `yaml:"ignore_kinds"`
 	// IgnoreNamespaces lists namespaces to skip during discover/refresh.
