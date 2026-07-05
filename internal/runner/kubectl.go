@@ -123,6 +123,13 @@ func FetchAndSave(context, kind, name, ns, outFile string, dryRun bool) error {
 		return nil
 	}
 
+	// Carry over any hand-written comments from the file already in the repo.
+	if merged, err := mergeCommentsFromFile(outFile, cleaned); err != nil {
+		fmt.Fprintf(os.Stderr, "  [warn] preserve comments %s: %v\n", outFile, err)
+	} else {
+		cleaned = merged
+	}
+
 	if err := os.MkdirAll(filepath.Dir(outFile), 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(outFile), err)
 	}
