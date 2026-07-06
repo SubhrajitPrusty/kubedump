@@ -105,6 +105,12 @@ kubedump refresh --namespace default
 kubedump refresh --include-helm
 ```
 
+Comments you hand-add to a committed YAML file are preserved across refreshes.
+When a file is re-fetched, comments are re-attached to matching keys (matched by
+key name, so field reordering is fine); the fresh cluster data always wins for
+values. A comment attached to a key that no longer exists in the live resource
+is dropped, since it has nowhere to land.
+
 ### prune-helm
 
 Delete dumped YAML files whose content shows `managed-by: Helm`. Files inside `HelmRelease/` directories are preserved. Empty directories are cleaned up afterwards.
