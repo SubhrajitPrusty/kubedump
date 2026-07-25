@@ -44,9 +44,12 @@ Create a `kubedump.yaml` file in your working directory mapping local directory 
 clusters:
   api-cluster: arn:aws:eks:ap-south-1:123456789:cluster/api-cluster
   ws-cluster: arn:aws:eks:ap-south-1:123456789:cluster/ws-cluster
+include_kinds:
+  - Deployment
+  - StatefulSet
+  - Secret
 ignore_kinds:
   - ConfigMap
-  - Secret
 ignore_namespaces:
   - kube-system      # these four are the built-in defaults; listing them
   - kube-node-lease  # here overrides the defaults entirely, so add any
@@ -55,7 +58,11 @@ ignore_namespaces:
   - my-extra-ns
 ```
 
-`ignore_kinds` and `ignore_namespaces` are optional. When `ignore_namespaces` is absent, `kube-system`, `kube-node-lease`, `kube-public`, and `kube-flannel` are skipped by default. Set `ignore_namespaces: []` to disable the defaults.
+`include_kinds`, `ignore_kinds`, and `ignore_namespaces` are all optional.
+
+`include_kinds` sets the exact list of resource kinds to fetch, replacing the built-in defaults — use it to avoid passing `--kinds` on every run. Precedence is `--kinds` > `include_kinds` > built-in defaults.
+
+When `ignore_namespaces` is absent, `kube-system`, `kube-node-lease`, `kube-public`, and `kube-flannel` are skipped by default. Set `ignore_namespaces: []` to disable the defaults.
 
 ### AWS EKS
 
@@ -89,7 +96,9 @@ kubedump discover --namespace default --context my-ctx --cluster my-cluster
 kubedump discover --kinds Deployment,Service,ConfigMap
 ```
 
-Default kinds fetched: `Deployment`, `StatefulSet`, `DaemonSet`, `CronJob`, `Service`, `Ingress`, `ConfigMap`, `HorizontalPodAutoscaler`, `ServiceAccount`, `PodDisruptionBudget`, `Secret`.
+Default kinds fetched: `Deployment`, `StatefulSet`, `DaemonSet`, `CronJob`, `Service`, `Ingress`, `ConfigMap`, `HorizontalPodAutoscaler`, `ServiceAccount`, `PodDisruptionBudget`, `Secret`. Override them permanently with `include_kinds` in `kubedump.yaml`.
+
+Secrets of type `helm.sh/release.v1` (Helm's internal release history) are always skipped in both `discover` and `refresh`, since they are opaque release blobs rather than declarative config.
 
 ### refresh
 
