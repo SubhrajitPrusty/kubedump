@@ -81,8 +81,25 @@ func GetResources(context, ns, kind string) ([]ResourceInfo, error) {
 	return resources, nil
 }
 
+// commandError combines a failed command's stderr with its exit error, which on
+// its own says only "exit status 1".
+func commandError(stderr string, err error) string {
+	msg := strings.TrimSpace(stderr)
+	errMsg := err.Error()
+	switch {
+	case msg == "":
+		return errMsg
+	case msg == errMsg:
+		return msg
+	default:
+		return fmt.Sprintf("%s (%s)", msg, errMsg)
+	}
+}
+
 // FetchAndSave fetches a single resource and writes it cleaned via kubectl-neat.
-// Non-fatal errors (resource not found, neat failure) are printed and skipped.
+// Every failure is returned; sweeping callers (Discover, Refresh) log the error
+// and move on to the next resource, while a caller refreshing one explicitly
+// named file propagates it.
 func FetchAndSave(context, kind, name, ns, outFile string, dryRun bool) error {
 	args := []string{"get", kind, name, "--context=" + context, "-o", "yaml"}
 	if ns != "" {
@@ -99,28 +116,18 @@ func FetchAndSave(context, kind, name, ns, outFile string, dryRun bool) error {
 	cmd.Stderr = &stderr
 	raw, err := cmd.Output()
 	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		errMsg := err.Error()
-		if msg == "" {
-			msg = errMsg
-		} else if msg != errMsg {
-			msg = fmt.Sprintf("%s (%s)", msg, errMsg)
-		}
-		fmt.Fprintf(os.Stderr, "  [error] kubectl get %s/%s: %s\n", kind, name, msg)
-		return nil
+		return fmt.Errorf("kubectl get %s/%s: %s", kind, name, commandError(stderr.String(), err))
 	}
 
 	neatCmd := exec.Command("kubectl", "neat")
 	neatCmd.Stdin = bytes.NewReader(raw)
 	cleaned, err := neatCmd.Output()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "  [error] kubectl neat %s/%s: %v\n", kind, name, err)
-		return nil
+		return fmt.Errorf("kubectl neat %s/%s: %w", kind, name, err)
 	}
 
 	if len(bytes.TrimSpace(cleaned)) == 0 {
-		fmt.Printf("  [warn] empty output for %s/%s, skipping\n", kind, name)
-		return nil
+		return fmt.Errorf("empty output for %s/%s after kubectl neat", kind, name)
 	}
 
 	// Carry over any hand-written comments from the file already in the repo.

@@ -110,7 +110,7 @@ kubedump refresh
 # Limit to a specific namespace
 kubedump refresh --namespace default
 
-# Also refresh HelmRelease directories
+# Also refresh resources owned by Helm (HelmRelease values.yaml is always refreshed)
 kubedump refresh --include-helm
 ```
 
@@ -119,6 +119,36 @@ When a file is re-fetched, comments are re-attached to matching keys (matched by
 key name, so field reordering is fine); the fresh cluster data always wins for
 values. A comment attached to a key that no longer exists in the live resource
 is dropped, since it has nowhere to land.
+
+#### Refreshing specific files
+
+Pass one or more paths to refresh only those, instead of walking the whole tree.
+
+```bash
+# A single resource
+kubedump refresh api-cluster/default/Deployment/api-server.yaml
+
+# Several at once, or a shell glob
+kubedump refresh api-cluster/default/Deployment/*.yaml
+
+# A Helm release — the trailing values.yaml is optional
+kubedump refresh api-cluster/kube-system/HelmRelease/aws-load-balancer-controller
+```
+
+Paths are interpreted relative to `--base-dir` (absolute paths work too), in one of two shapes:
+
+```text
+<cluster>/<namespace>/<Kind>/<name>.yaml
+<cluster>/<namespace>/HelmRelease/<release>[/values.yaml]
+```
+
+Targeted refresh differs from the full sweep in three ways:
+
+- **Filters are reported, not applied.** `ignore_kinds`, `ignore_namespaces` and Helm ownership never skip a file you named explicitly — naming a path is a stronger signal of intent than a bulk filter — so each is printed as an `[explicit]` notice instead. Secrets of type `helm.sh/release.v1` are the one exception and are still refused.
+- **Failures exit non-zero.** The sweep logs an error per resource and carries on; a named path that cannot be refreshed fails the command, which makes it safe to use in scripts. Every path is still attempted before the command exits.
+- **Kind and name are read from the file**, not the path, so a regular resource must already exist — use `discover` to create it. A `HelmRelease` path is the exception: the release name is in the path itself, so a missing `values.yaml` gets created.
+
+`--context <ctx>` overrides the context for a path whose cluster directory is not in `kubedump.yaml`. `--namespace` is rejected alongside paths, since a path already names its namespace.
 
 ### prune-helm
 
@@ -142,6 +172,14 @@ kubedump prune-helm
 ## GitHub Actions
 
 See [docs/github-actions.md](docs/github-actions.md) for a complete workflow that runs a daily refresh and opens a PR when manifests change.
+
+## Roadmap
+
+Deliberately deferred, roughly in order of usefulness:
+
+- **Directory arguments for `refresh`** — `kubedump refresh <cluster>/<namespace>` to sweep one subtree rather than one file. Needs `runner.Refresh` generalised to start at any depth in the tree instead of always at a cluster root; `--namespace` covers the common case for now.
+- **Create files from a path alone** — a regular resource must already exist to be refreshed, since its kind and name are read from the file contents. Inferring the kind from the `<Kind>` directory segment would let `refresh` fetch a resource that was never discovered, at the cost of trusting directory casing to match the API kind.
+- **Fuzzy resource matching** — `kubedump refresh api-server`, resolving a bare name across clusters and namespaces. Shell globs cover most of this, and ambiguous matches would need a disambiguation prompt to be worth it.
 
 ## Development
 
