@@ -44,7 +44,7 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 			continue
 		}
 
-		outFile := filepath.Join(baseDir, clusterDir, ns, "HelmRelease", release, "values.yaml")
+		outFile := filepath.Join(baseDir, clusterDir, ns, helmReleaseDir, release, helmValuesFile)
 
 		if dryRun {
 			fmt.Printf("[dry-run] helm get values %s -n %s --kube-context %s > %s\n",
@@ -66,14 +66,7 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 		helmCmd.Stderr = &helmStderr
 		values, err := helmCmd.Output()
 		if err != nil {
-			msg := strings.TrimSpace(helmStderr.String())
-			errMsg := err.Error()
-			if msg == "" {
-				msg = errMsg
-			} else if msg != errMsg {
-				msg = fmt.Sprintf("%s (%s)", msg, errMsg)
-			}
-			fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %s\n", release, msg)
+			fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %s\n", release, commandError(helmStderr.String(), err))
 			continue
 		}
 
@@ -91,7 +84,10 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 	return nil
 }
 
-// RefreshHelmRelease re-fetches values for a single Helm release.
+// RefreshHelmRelease re-fetches values for a single Helm release. Failures are
+// returned, so sweeping callers log and continue while a caller refreshing one
+// explicitly named release propagates them. A missing helm binary is not an
+// error here — Helm tracking is optional; callers that need it check first.
 func RefreshHelmRelease(release, ns, context, outFile string, dryRun bool) error {
 	if !helmAvailable() {
 		return nil
@@ -113,15 +109,7 @@ func RefreshHelmRelease(release, ns, context, outFile string, dryRun bool) error
 	helmCmd.Stderr = &stderr
 	values, err := helmCmd.Output()
 	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		errMsg := err.Error()
-		if msg == "" {
-			msg = errMsg
-		} else if msg != errMsg {
-			msg = fmt.Sprintf("%s (%s)", msg, errMsg)
-		}
-		fmt.Fprintf(os.Stderr, "  [error] helm get values %s: %s\n", release, msg)
-		return nil
+		return fmt.Errorf("helm get values %s -n %s: %s", release, ns, commandError(stderr.String(), err))
 	}
 
 	if merged, err := mergeCommentsFromFile(outFile, values); err != nil {
@@ -130,6 +118,10 @@ func RefreshHelmRelease(release, ns, context, outFile string, dryRun bool) error
 		values = merged
 	}
 
+	// The release directory may not exist yet when a single path was named.
+	if err := os.MkdirAll(filepath.Dir(outFile), 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(outFile), err)
+	}
 	if err := os.WriteFile(outFile, values, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", outFile, err)
 	}

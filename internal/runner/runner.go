@@ -12,6 +12,15 @@ import (
 
 const DefaultKinds = "Deployment,StatefulSet,DaemonSet,CronJob,Service,Ingress,ConfigMap,HorizontalPodAutoscaler,ServiceAccount,PodDisruptionBudget,Secret"
 
+const (
+	// helmReleaseDir is the pseudo-kind directory holding Helm release values.
+	helmReleaseDir = "HelmRelease"
+	helmValuesFile = "values.yaml"
+	// helmReleaseSecretType marks Helm's internal release history secrets.
+	helmReleaseSecretType = "helm.sh/release.v1"
+	managedByLabel        = "app.kubernetes.io/managed-by"
+)
+
 // resourceMeta is a minimal struct for parsing kind/name/namespace/labels/type from a YAML file.
 type resourceMeta struct {
 	Kind     string `yaml:"kind"`
@@ -55,6 +64,11 @@ func isNamespaceIgnored(ns string, ignoreNamespaces []string) bool {
 		}
 	}
 	return false
+}
+
+// isYAMLFile reports whether name carries a YAML extension.
+func isYAMLFile(name string) bool {
+	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
 }
 
 // Discover fetches all resources from a cluster and writes them to baseDir.
@@ -105,7 +119,7 @@ func Discover(baseDir, clusterDir, context, nsFilter, kinds string, ignoreKinds,
 			}
 
 			for _, res := range resources {
-				if res.Type == "helm.sh/release.v1" {
+				if res.Type == helmReleaseSecretType {
 					fmt.Printf("  [skip-helm-secret] %s/%s\n", kind, res.Name)
 					continue
 				}
@@ -165,7 +179,7 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds, ignoreNamespace
 			kindPath := filepath.Join(nsPath, kindDir)
 
 			// HelmRelease dirs: always refresh via helm get values
-			if kindDir == "HelmRelease" {
+			if kindDir == helmReleaseDir {
 				releaseEntries, err := os.ReadDir(kindPath)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "  [error] read HelmRelease dir %s: %v\n", kindPath, err)
@@ -175,7 +189,7 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds, ignoreNamespace
 					if !re.IsDir() {
 						continue
 					}
-					outFile := filepath.Join(kindPath, re.Name(), "values.yaml")
+					outFile := filepath.Join(kindPath, re.Name(), helmValuesFile)
 					if err := RefreshHelmRelease(re.Name(), ns, context, outFile, dryRun); err != nil {
 						fmt.Fprintf(os.Stderr, "  [error] %v\n", err)
 					}
@@ -194,7 +208,7 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds, ignoreNamespace
 					continue
 				}
 				name := e.Name()
-				if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+				if !isYAMLFile(name) {
 					continue
 				}
 				yamlFile := filepath.Join(kindPath, name)
@@ -203,11 +217,11 @@ func Refresh(clusterPath, context, nsFilter string, ignoreKinds, ignoreNamespace
 					fmt.Printf("  [skip] %s (could not parse kind/name)\n", yamlFile)
 					continue
 				}
-				if meta.Type == "helm.sh/release.v1" {
+				if meta.Type == helmReleaseSecretType {
 					fmt.Printf("  [skip-helm-secret] %s/%s\n", meta.Kind, meta.Metadata.Name)
 					continue
 				}
-				if !includeHelm && meta.Metadata.Labels["app.kubernetes.io/managed-by"] == "Helm" {
+				if !includeHelm && meta.Metadata.Labels[managedByLabel] == "Helm" {
 					fmt.Printf("  [skip-helm] %s/%s\n", meta.Kind, meta.Metadata.Name)
 					continue
 				}
@@ -231,10 +245,10 @@ func PruneHelm(baseDir string, dryRun bool) error {
 			return err
 		}
 		// Keep HelmRelease values files
-		if strings.Contains(path, string(filepath.Separator)+"HelmRelease"+string(filepath.Separator)) {
+		if strings.Contains(path, string(filepath.Separator)+helmReleaseDir+string(filepath.Separator)) {
 			return nil
 		}
-		if !strings.HasSuffix(path, ".yaml") && !strings.HasSuffix(path, ".yml") {
+		if !isYAMLFile(path) {
 			return nil
 		}
 
@@ -243,7 +257,7 @@ func PruneHelm(baseDir string, dryRun bool) error {
 			fmt.Fprintf(os.Stderr, "  [warn] parse %s: %v\n", path, err)
 			return nil
 		}
-		if meta.Metadata.Labels["app.kubernetes.io/managed-by"] != "Helm" {
+		if meta.Metadata.Labels[managedByLabel] != "Helm" {
 			return nil
 		}
 

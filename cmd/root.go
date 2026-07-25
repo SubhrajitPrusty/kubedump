@@ -24,6 +24,10 @@ and saves them under:
   <cluster>/<namespace>/HelmRelease/<release>/values.yaml
 
 Cluster contexts are resolved via a kubedump.yaml file in the base directory.`,
+	// Runtime failures shouldn't dump the whole usage block; flag errors still do.
+	// Errors are reported by Execute, so cobra must not also print them.
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 // resolveKinds returns the kinds string to use for discover, in priority order:
