@@ -118,7 +118,18 @@ Comments you hand-add to a committed YAML file are preserved across refreshes.
 When a file is re-fetched, comments are re-attached to matching keys (matched by
 key name, so field reordering is fine); the fresh cluster data always wins for
 values. A comment attached to a key that no longer exists in the live resource
-is dropped, since it has nowhere to land.
+is dropped, since it has nowhere to land — but the drop is reported, so a
+hand-written rationale never disappears silently:
+
+```text
+  [helm] bolna-ws-cluster-usa/datadog/HelmRelease/datadog-agent/values.yaml
+  [warn] dropped commented key: datadog.operator
+         (7 comment lines lost; key absent from live state)
+```
+
+That warning usually means the committed file carries a value never applied to
+the cluster — reconcile it (apply it, or drop it deliberately) rather than
+letting every refresh re-delete it.
 
 #### Refreshing specific files
 

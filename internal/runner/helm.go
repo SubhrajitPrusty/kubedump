@@ -70,7 +70,8 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 			continue
 		}
 
-		if merged, err := mergeCommentsFromFile(outFile, values); err != nil {
+		merged, dropped, err := mergeCommentsFromFile(outFile, values)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "  [warn] preserve comments %s: %v\n", outFile, err)
 		} else {
 			values = merged
@@ -80,6 +81,7 @@ func DumpHelmReleases(baseDir, clusterDir, ns, context string, dryRun bool) erro
 			return fmt.Errorf("write %s: %w", outFile, err)
 		}
 		fmt.Printf("  [helm] %s\n", outFile)
+		warnDroppedComments(dropped)
 	}
 	return nil
 }
@@ -112,7 +114,8 @@ func RefreshHelmRelease(release, ns, context, outFile string, dryRun bool) error
 		return fmt.Errorf("helm get values %s -n %s: %s", release, ns, commandError(stderr.String(), err))
 	}
 
-	if merged, err := mergeCommentsFromFile(outFile, values); err != nil {
+	merged, dropped, err := mergeCommentsFromFile(outFile, values)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "  [warn] preserve comments %s: %v\n", outFile, err)
 	} else {
 		values = merged
@@ -126,5 +129,6 @@ func RefreshHelmRelease(release, ns, context, outFile string, dryRun bool) error
 		return fmt.Errorf("write %s: %w", outFile, err)
 	}
 	fmt.Printf("  [helm] %s\n", outFile)
+	warnDroppedComments(dropped)
 	return nil
 }
