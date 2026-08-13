@@ -131,7 +131,8 @@ func FetchAndSave(context, kind, name, ns, outFile string, dryRun bool) error {
 	}
 
 	// Carry over any hand-written comments from the file already in the repo.
-	if merged, err := mergeCommentsFromFile(outFile, cleaned); err != nil {
+	merged, dropped, err := mergeCommentsFromFile(outFile, cleaned)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "  [warn] preserve comments %s: %v\n", outFile, err)
 	} else {
 		cleaned = merged
@@ -145,5 +146,6 @@ func FetchAndSave(context, kind, name, ns, outFile string, dryRun bool) error {
 	}
 
 	fmt.Printf("  [ok] %s\n", outFile)
+	warnDroppedComments(dropped)
 	return nil
 }
