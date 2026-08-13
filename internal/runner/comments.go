@@ -2,7 +2,9 @@ package runner
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -56,8 +58,8 @@ func mergeComments(oldData, newData []byte) ([]byte, []droppedComment, error) {
 
 // copyComments copies head/line/foot comments from old onto new, then recurses
 // into matching children. Mappings are matched by key, sequences by index. Old
-// entries with no counterpart in new are recorded in dropped when they carry
-// comments.
+// entries with no counterpart in new — a vanished key, a truncated sequence, or
+// a value whose shape changed — are recorded in dropped when they carry comments.
 func copyComments(old, new *yaml.Node, path string, dropped *[]droppedComment) {
 	if old == nil || new == nil {
 		return
@@ -73,15 +75,20 @@ func copyComments(old, new *yaml.Node, path string, dropped *[]droppedComment) {
 		new.FootComment = old.FootComment
 	}
 
+	// A shape change — mapping → scalar, sequence → mapping, a whole values
+	// document collapsing to null — leaves everything nested below with nowhere
+	// to land. Report it instead of dropping the subtree silently.
+	if old.Kind != new.Kind {
+		recordSubtreeDropped(old, path, dropped)
+		return
+	}
+
 	switch new.Kind {
 	case yaml.DocumentNode:
-		if old.Kind == yaml.DocumentNode && len(old.Content) > 0 && len(new.Content) > 0 {
+		if len(old.Content) > 0 && len(new.Content) > 0 {
 			copyComments(old.Content[0], new.Content[0], path, dropped)
 		}
 	case yaml.MappingNode:
-		if old.Kind != yaml.MappingNode {
-			return
-		}
 		// Index new entries by key so we match on key name, not position —
 		// kubectl and helm reorder fields freely between fetches. Walking old
 		// (not new) is what makes a vanished key observable.
@@ -100,9 +107,6 @@ func copyComments(old, new *yaml.Node, path string, dropped *[]droppedComment) {
 			copyComments(old.Content[i+1], new.Content[j+1], child, dropped) // value subtree
 		}
 	case yaml.SequenceNode:
-		if old.Kind != yaml.SequenceNode {
-			return
-		}
 		for i, item := range old.Content {
 			child := fmt.Sprintf("%s[%d]", path, i)
 			if i >= len(new.Content) {
@@ -110,6 +114,26 @@ func copyComments(old, new *yaml.Node, path string, dropped *[]droppedComment) {
 				continue
 			}
 			copyComments(item, new.Content[i], child, dropped)
+		}
+	}
+}
+
+// recordSubtreeDropped reports each commented child of old, for when the fresh
+// value has a different shape so nothing beneath it can be matched. Comments on
+// old itself are not reported — those land on the replacement node.
+func recordSubtreeDropped(old *yaml.Node, path string, dropped *[]droppedComment) {
+	switch old.Kind {
+	case yaml.DocumentNode:
+		for _, child := range old.Content {
+			recordSubtreeDropped(child, path, dropped)
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(old.Content); i += 2 {
+			recordDropped(childPath(path, old.Content[i].Value), dropped, old.Content[i], old.Content[i+1])
+		}
+	case yaml.SequenceNode:
+		for i, item := range old.Content {
+			recordDropped(fmt.Sprintf("%s[%d]", path, i), dropped, item)
 		}
 	}
 }
@@ -153,13 +177,19 @@ func childPath(parent, key string) string {
 }
 
 // mergeCommentsFromFile reads the existing file at path (if any) and returns
-// newData with its comments merged in. When the file is missing, empty, or
-// unparseable, newData is returned unchanged along with a non-nil error only
-// for a genuine merge failure (a missing file is not an error).
+// newData with its comments merged in. A missing or empty file is not an error —
+// there is simply nothing to preserve. Any other read failure is returned, since
+// a file that exists but cannot be read is about to be overwritten and would
+// otherwise lose its comments silently.
 func mergeCommentsFromFile(path string, newData []byte) ([]byte, []droppedComment, error) {
 	existing, err := os.ReadFile(path)
-	if err != nil || len(bytes.TrimSpace(existing)) == 0 {
-		return newData, nil, nil // no existing content to preserve
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return newData, nil, nil // nothing committed yet
+	case err != nil:
+		return newData, nil, err
+	case len(bytes.TrimSpace(existing)) == 0:
+		return newData, nil, nil
 	}
 	return mergeComments(existing, newData)
 }

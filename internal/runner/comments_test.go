@@ -168,3 +168,37 @@ func TestMergeCommentsFromFileRoundTrip(t *testing.T) {
 		t.Errorf("comment not preserved from existing file, got %q", got)
 	}
 }
+
+func TestMergeCommentsReportsShapeChange(t *testing.T) {
+	old := []byte("settings:\n  enabled: true # why this is on\n")
+	new := []byte("settings: disabled\n")
+
+	_, dropped, err := mergeComments(old, new)
+	if err != nil {
+		t.Fatalf("mergeComments: %v", err)
+	}
+	if len(dropped) != 1 || dropped[0].Path != "settings.enabled" {
+		t.Errorf("want one dropped comment at settings.enabled, got %+v", dropped)
+	}
+}
+
+func TestMergeCommentsReportsCollapsedDocument(t *testing.T) {
+	old := []byte("datadog:\n  # why the operator is off\n  operator:\n    enabled: false\n")
+	new := []byte("null\n") // helm get values on a release with no user-supplied values
+
+	_, dropped, err := mergeComments(old, new)
+	if err != nil {
+		t.Fatalf("mergeComments: %v", err)
+	}
+	if len(dropped) != 1 || dropped[0].Path != "datadog" {
+		t.Errorf("want one dropped comment at datadog, got %+v", dropped)
+	}
+}
+
+func TestMergeCommentsFromFileUnreadable(t *testing.T) {
+	// A directory is readable-as-a-path but not as a file: a non-ENOENT error.
+	_, _, err := mergeCommentsFromFile(t.TempDir(), []byte("kind: Deployment\n"))
+	if err == nil {
+		t.Error("unreadable existing path should surface an error, not be treated as absent")
+	}
+}
